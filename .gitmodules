@@ -1,0 +1,6 @@
+[submodule "django-tests"]
+	path = django-tests
+	url = git@github.com:LeoFernanndes/django-tests.git
+[submodule "next-tests"]
+	path = next-tests
+	url = git@github.com:LeoFernanndes/next-tests.git
