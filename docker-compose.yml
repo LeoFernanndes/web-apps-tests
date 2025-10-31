@@ -1,0 +1,95 @@
+version: '3'
+
+services:
+
+  frontend:
+    build:
+      context: ./next-tests/.
+    network_mode: "host"
+    env_file:
+      - ./next-tests/.env
+
+  backend:
+    container_name: web-apps-tests-backend
+    build:
+      context: ./django-tests/.
+    ports:
+      - "18000:8000"
+    env_file:
+      - ./django-tests/.env
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - backend_network
+
+  database:
+    image: postgres:16
+    container_name: "web-apps-tests-postgres"
+    environment:
+      - POSTGRES_DB=web-apps-tests
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+    ports:
+      - '15432:5432'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s # Optional: give Postgres time to start before checks begin
+    networks:
+      - backend_network
+
+
+  redis:
+    image: redis:8.0-alpine
+    container_name: "web-apps-tests-redis"
+    ports:
+      - '16370:6379'
+    networks:
+      - backend_network
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server --console-address ":9001" /data
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    environment:
+      MINIO_BROWSER_REDIRECT_URL: "http://127.0.0.1:9001"
+      MINIO_ROOT_USER: "AKIAIOSFODNN7EXAMPLE"
+      MINIO_ROOT_PASSWORD: "wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY"
+    networks:
+    - backend_network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      # - "14317:4317"    # OTLP gRPC receiver
+      # - "14318:4318"    # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - backend_network
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: [
+        "--config=/etc/open_telemetry/otel-collector-config.yaml"
+      ]
+    volumes:
+      - ./open_telemetry/:/etc/open_telemetry/
+    ports:
+      - "14317:4317"   # OTLP gRPC receiver
+      - "14318:4318"   # OTLP HTTP receiver
+      - "18888:8888"   # Prometheus metrics
+    depends_on:
+      - jaeger
+    networks:
+      - backend_network
+
+networks:
+  backend_network:
+    driver: bridge
